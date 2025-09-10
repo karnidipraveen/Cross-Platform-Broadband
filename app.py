@@ -159,7 +159,8 @@ def admin_dashboard(user):
     # Welcome header
     st.markdown(f"### 👑 Welcome, {user['name']} (Admin)")
 
-    # ---------- Mini Dashboard Metrics ----------
+    # ---------- Mini Dashboard Metrics (custom cards with hover) ----------
+    # compute metrics as before
     total_users = users_collection.count_documents({})
     total_customers = users_collection.count_documents({"role": "customer"})
     total_subscriptions = customers_collection.count_documents({})
@@ -167,31 +168,149 @@ def admin_dashboard(user):
     # Revenue calculations
     total_revenue = 0
     active_revenue = 0
-
     for sub in customers_collection.find():
-        plan = plans_collection.find_one({"name": sub["plan_name"]})
+        plan = plans_collection.find_one({"name": sub.get("plan_name")})
         if plan:
-            total_revenue += plan["price"]
+            total_revenue += plan.get("price", 0)
             if sub.get("status") == "active":
-                active_revenue += plan["price"]
+                active_revenue += plan.get("price", 0)
 
-    # ---------- Display metrics in custom widths ----------
-    col1, col2, col3, col4, col5 = st.columns([1.2, 1.2, 1.2, 1.3, 1.5])
+    # format numbers safely
+    def fmt(n):
+        try:
+            return f"{int(n):,}"
+        except Exception:
+            try:
+                return f"{float(n):,.2f}"
+            except Exception:
+                return str(n)
 
-    col1.metric("👥 Total Users", total_users)
-    col2.metric("🙋 Total Customers", total_customers)
-    col3.metric("📋 Subscriptions", total_subscriptions)
-    col4.metric("⚡ Active Revenue", f"₹{active_revenue:,}")
-    col5.metric("💰 Total Revenue", f"₹{total_revenue:,}")
+    total_users_f = fmt(total_users)
+    total_customers_f = fmt(total_customers)
+    total_subscriptions_f = fmt(total_subscriptions)
+    active_revenue_f = f"₹{fmt(active_revenue)}"
+    total_revenue_f = f"₹{fmt(total_revenue)}"
 
-
-    # Dynamic CSS for button-like tabs
+    # CSS + HTML grid of metric cards
     st.markdown(
         """
         <style>
+        /* Grid wrapper */
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+            align-items: stretch;
+        }
+
+        /* Individual card */
+        .metric-card {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 16px 18px;
+            border: 1px solid rgba(14, 165, 233, 0.06);
+            box-shadow: 0 4px 10px rgba(2,6,23,0.04);
+            transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 72px;
+        }
+
+        /* Hover highlight */
+        .metric-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 10px 24px rgba(2,6,23,0.12);
+            background: linear-gradient(90deg, rgba(240,249,255,0.9), #ffffff);
+            border-color: rgba(14,165,233,0.18);
+        }
+
+        .metric-label {
+            font-size: 13px;
+            color: #374151;
+            margin-bottom: 6px;
+        }
+        .metric-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #0f172a;
+            line-height: 1;
+        }
+        .metric-sub {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 6px;
+        }
+
+        /* Responsive */
+        @media (max-width: 1100px) {
+            .metric-grid { grid-template-columns: repeat(3, 1fr); }
+        }
+        @media (max-width: 700px) {
+            .metric-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 420px) {
+            .metric-grid { grid-template-columns: 1fr; }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    html = f"""
+    <div class="metric-grid">
+    <div class="metric-card">
+        <div class="metric-label">👥 Total Users</div>
+        <div class="metric-value">{total_users_f}</div>
+        <div class="metric-sub">All registered users</div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-label">🙋 Total Customers</div>
+        <div class="metric-value">{total_customers_f}</div>
+        <div class="metric-sub">Users with customer role</div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-label">📋 Subscriptions</div>
+        <div class="metric-value">{total_subscriptions_f}</div>
+        <div class="metric-sub">All user subscriptions</div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-label">⚡ Active Revenue</div>
+        <div class="metric-value">{active_revenue_f}</div>
+        <div class="metric-sub">From active subscriptions</div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-label">💰 Total Revenue</div>
+        <div class="metric-value">{total_revenue_f}</div>
+        <div class="metric-sub">All-time (from plans)</div>
+    </div>
+    </div>
+    """
+
+    st.markdown(html, unsafe_allow_html=True)
+
+
+    # Dynamic CSS for button-like fixed tabs
+    st.markdown(
+        """
+        <style>
+        /* Make the tab bar sticky at the top */
         .stTabs [data-baseweb="tab-list"] {
             gap: 12px;
+            position: sticky;
+            top: 0;
+            z-index: 999;
+            background-color: #ffffff;
+            padding: 10px 0;
+            margin-bottom: 15px;
         }
+
         .stTabs [data-baseweb="tab"] {
             background-color: #ffffff;
             padding: 10px 18px;
@@ -244,38 +363,31 @@ def admin_dashboard(user):
 
             # ---------- Filter Users Based on Admin Role ----------
             if is_super_admin:
-                # Super admin sees everyone
                 admins = [u for u in all_users if u['role'] == 'admin']
                 customers = [u for u in all_users if u['role'] == 'customer']
             else:
-                # Other admins see all admins except super admin
-                admins = [u for u in all_users if u['role'] ==
-                          'admin' and u['email'] != "admin@portal.com"]
+                admins = [u for u in all_users if u['role'] == "admin" and u['email'] != "admin@portal.com"]
                 customers = [u for u in all_users if u['role'] == 'customer']
 
             # ---------- Helper Function to Render User Cards ----------
-            def render_user_card(user):
+            def render_user_card(user, allow_verify=False):
                 col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
                 with col1:
                     st.markdown(f"**{user['name']}**")
                     st.caption(user['email'])
                 with col2:
                     st.markdown(f"Role: `{user['role'].capitalize()}`")
-                    status = "✅ Approved" if user.get(
-                        "approved", False) else "⏳ Pending"
+                    status = "✅ Approved" if user.get("approved", False) else "⏳ Pending"
                     st.markdown(f"**Status:** {status}")
                 with col3:
-                    # Only super admin can verify admins
-                    if not user.get("approved", False) and is_super_admin:
+                    if allow_verify and not user.get("approved", False):
                         if st.button("✔ Verify", key=f"verify_{user['_id']}"):
                             users_collection.update_one(
-                                {"_id": user["_id"]}, {
-                                    "$set": {"approved": True}}
+                                {"_id": user["_id"]}, {"$set": {"approved": True}}
                             )
                             st.success(f"User {user['name']} verified!")
                             st.rerun()
                 with col4:
-                    # Super Admin can edit/delete anyone
                     if is_super_admin:
                         if st.button("📝 Edit", key=f"edit_{user['_id']}"):
                             st.session_state["edit_user"] = user
@@ -284,13 +396,11 @@ def admin_dashboard(user):
                             st.error(f"User {user['name']} deleted!")
                             st.rerun()
                     else:
-                        # Normal admins can only edit/delete customers
                         if user['role'] == "customer":
                             if st.button("📝 Edit", key=f"edit_{user['_id']}"):
                                 st.session_state["edit_user"] = user
                             if st.button("🗑 Delete", key=f"delete_{user['_id']}"):
-                                users_collection.delete_one(
-                                    {"_id": user["_id"]})
+                                users_collection.delete_one({"_id": user["_id"]})
                                 st.error(f"User {user['name']} deleted!")
                                 st.rerun()
                 st.markdown("---")
@@ -299,15 +409,32 @@ def admin_dashboard(user):
             if admins:
                 st.markdown("### 👑 Admins")
                 for admin in admins:
-                    render_user_card(admin)
+                    render_user_card(admin, allow_verify=True)
             else:
                 st.info("No Admins found.")
 
             # ---------- Customers Section ----------
             if customers:
                 st.markdown("### 🙋 Customers")
-                for customer in customers:
-                    render_user_card(customer)
+                cust_tabs = st.tabs(["Approved Customers", "Pending Approvals"])
+
+                # Customers Tab → Only approved customers
+                with cust_tabs[0]:
+                    approved_customers = [c for c in customers if c.get("approved", False)]
+                    if approved_customers:
+                        for customer in approved_customers:
+                            render_user_card(customer, allow_verify=False)
+                    else:
+                        st.info("No approved customers yet.")
+
+                # Permissions Tab → Customers waiting for approval
+                with cust_tabs[1]:
+                    pending_customers = [c for c in customers if not c.get("approved", False)]
+                    if pending_customers:
+                        for customer in pending_customers:
+                            render_user_card(customer, allow_verify=True)
+                    else:
+                        st.info("No pending approvals.")
             else:
                 st.info("No Customers found.")
 
@@ -320,16 +447,17 @@ def admin_dashboard(user):
                 new_role = st.selectbox("Role", ["customer", "admin"],
                                         index=0 if edit_user['role'] == "customer" else 1)
 
-                # Restrict role change for normal admins
                 if not is_super_admin and new_role == "admin" and edit_user['role'] != "admin":
                     st.warning("❌ Only Super Admin can assign admin role.")
                 else:
                     if st.button("💾 Save Changes"):
                         users_collection.update_one(
                             {"_id": edit_user["_id"]},
-                            {"$set": {"name": new_name,
-                                      "email": new_email,
-                                      "role": new_role if is_super_admin else edit_user['role']}}
+                            {"$set": {
+                                "name": new_name,
+                                "email": new_email,
+                                "role": new_role if is_super_admin else edit_user['role']
+                            }}
                         )
                         st.success(f"User {new_name} updated!")
                         del st.session_state["edit_user"]
@@ -921,9 +1049,10 @@ def admin_dashboard(user):
     with tabs[4]:
         st.subheader("Add New User")
 
-        # Get logged-in user details
-        current_email = st.session_state.get("email", "")
-        current_role = st.session_state.get("role", "customer")
+        # Get logged-in user details correctly
+        current_user = st.session_state.get("user", {})
+        current_email = current_user.get("email", "")
+        current_role = current_user.get("role", "customer")
 
         name = st.text_input("Full Name", key="add_user_name")
         email = st.text_input("Email", key="add_user_email")
@@ -954,6 +1083,46 @@ def admin_dashboard(user):
                     st.rerun()
             else:
                 st.warning("Please fill all fields.")
+    # ---------- ADD PLAN TAB ----------
+    with tabs[5]:
+        st.subheader("Add New Plan")
+
+        # Input fields for plan
+        plan_name = st.text_input("Plan Name", key="add_plan_name")
+        price = st.number_input("Price (₹)", min_value=0, key="add_plan_price")
+        valid_data = st.number_input("Total Data (GB)", min_value=0, key="add_plan_data")
+        speed = st.text_input("Speed (e.g., 30 Mbps)", key="add_plan_speed")
+        validity_days = st.number_input("Validity (Days)", min_value=1, key="add_plan_validity")
+        description = st.text_area("Description", key="add_plan_desc")
+
+        # Duration type selection
+        duration_type = st.selectbox("Duration Type", ["Monthly", "Quarterly", "Yearly"], key="add_plan_duration")
+
+        # Plan type selection
+        plan_type = st.selectbox("Plan Type", ["Normal", "Offer"], key="add_plan_type")
+
+        if st.button("Add Plan", key="add_plan_btn"):
+            # Validate inputs
+            if plan_name and price >= 0 and valid_data >= 0 and speed and validity_days > 0:
+                # Check if plan with same name exists
+                if plans_collection.find_one({"name": plan_name}):
+                    st.error("A plan with this name already exists!")
+                else:
+                    plans_collection.insert_one({
+                        "name": plan_name,
+                        "price": price,
+                        "valid_data": valid_data,
+                        "speed": speed,
+                        "validity_days": validity_days,
+                        "description": description,
+                        "duration_type": duration_type,
+                        "plan_type": plan_type,
+                        "createdAt": datetime.now()
+                    })
+                    st.success(f"✅ Plan '{plan_name}' added successfully!")
+                    st.rerun()
+            else:
+                st.warning("Please fill all fields correctly.")
 
 
 # ========================
@@ -964,17 +1133,15 @@ def customer_dashboard(user):
     # ---------- Welcome Header ----------
     st.markdown(f"### 🙋 Welcome, {user['name']} (Customer)")
 
-    # ---------- Mini Dashboard Metrics ----------
+    # ---------- Mini Dashboard Metrics (Customer) ----------
     user_subs = list(customers_collection.find({"user_email": user["email"]}))
 
     # Count plans
-    active_subs = len([s for s in user_subs if s.get(
-        "status") in ["active", "stopped"]])
-    previous_subs = len(
-        [s for s in user_subs if s.get("status") == "previous"])
+    active_subs = len([s for s in user_subs if s.get("status") in ["active", "stopped"]])
+    previous_subs = len([s for s in user_subs if s.get("status") == "previous"])
     total_subs = len(user_subs)
 
-    # Revenue calculations (only active plans)
+    # Revenue calculations (only active and total)
     active_revenue = sum(
         plans_collection.find_one({"name": s["plan_name"]})["price"]
         for s in user_subs
@@ -986,21 +1153,128 @@ def customer_dashboard(user):
         if plans_collection.find_one({"name": s["plan_name"]})
     )
 
-    # ---------- Display metrics in 5 columns ----------
-    col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("🟢 Your Active Plans", active_subs)
-    col2.metric("⏳ Your Previous Plans", previous_subs)
-    col3.metric("📋 All Subscriptions", total_subs)
-    col4.metric("⚡ Current Plan Cost", f"₹{active_revenue:,}")
-    col5.metric("💰 Total Spent", f"₹{total_revenue:,}")
+    # format helper
+    def fmt(n):
+        try:
+            return f"{int(n):,}"
+        except Exception:
+            try:
+                return f"{float(n):,.2f}"
+            except Exception:
+                return str(n)
+
+    active_subs_f = fmt(active_subs)
+    previous_subs_f = fmt(previous_subs)
+    total_subs_f = fmt(total_subs)
+    active_revenue_f = f"₹{fmt(active_revenue)}"
+    total_revenue_f = f"₹{fmt(total_revenue)}"
+
+    # ---------- CSS (paste once globally at the top if you want to reuse) ----------
+    st.markdown(
+        """
+        <style>
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+            align-items: stretch;
+        }
+        .metric-card {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 16px 18px;
+            border: 1px solid rgba(14, 165, 233, 0.06);
+            box-shadow: 0 4px 10px rgba(2,6,23,0.04);
+            transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 72px;
+        }
+        .metric-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 10px 24px rgba(2,6,23,0.12);
+            background: linear-gradient(90deg, rgba(240,249,255,0.9), #ffffff);
+            border-color: rgba(14,165,233,0.18);
+        }
+        .metric-label {
+            font-size: 13px;
+            color: #374151;
+            margin-bottom: 6px;
+        }
+        .metric-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #0f172a;
+            line-height: 1;
+        }
+        .metric-sub {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 6px;
+        }
+        @media (max-width: 1100px) { .metric-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 700px) { .metric-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 420px) { .metric-grid { grid-template-columns: 1fr; } }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # ---------- Customer Metrics HTML ----------
+    html_customer = f"""
+    <div class="metric-grid">
+    <div class="metric-card">
+        <div class="metric-label">🟢 Active Plans</div>
+        <div class="metric-value">{active_subs_f}</div>
+        <div class="metric-sub">Currently active or stopped</div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-label">⏳ Previous Plans</div>
+        <div class="metric-value">{previous_subs_f}</div>
+        <div class="metric-sub">Expired or old subscriptions</div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-label">📋 All Subscriptions</div>
+        <div class="metric-value">{total_subs_f}</div>
+        <div class="metric-sub">Your subscription history</div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-label">⚡ Current Plan Cost</div>
+        <div class="metric-value">{active_revenue_f}</div>
+        <div class="metric-sub">Ongoing active plan</div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-label">💰 Total Spent</div>
+        <div class="metric-value">{total_revenue_f}</div>
+        <div class="metric-sub">All plans combined</div>
+    </div>
+    </div>
+    """
+
+    st.markdown(html_customer, unsafe_allow_html=True)
 
     # ---------- Dynamic Tabs Styling ----------
     st.markdown(
         """
         <style>
+        /* Make the tab bar sticky at the top */
         .stTabs [data-baseweb="tab-list"] {
             gap: 12px;
+            position: sticky;
+            top: 0;
+            z-index: 999;
+            background-color: #ffffff;
+            padding: 10px 0;
+            margin-bottom: 15px;
         }
+
         .stTabs [data-baseweb="tab"] {
             background-color: #ffffff;
             padding: 10px 18px;
@@ -1011,6 +1285,7 @@ def customer_dashboard(user):
             box-shadow: 0px 1px 3px rgba(0,0,0,0.05);
             transition: all 0.25s ease-in-out;
         }
+
         .stTabs [data-baseweb="tab"]:hover {
             background-color: #f9ffea;
             border: 1px solid #d6e9b5;
@@ -1018,6 +1293,7 @@ def customer_dashboard(user):
             transform: translateY(-2px);
             box-shadow: 0px 3px 8px rgba(0,0,0,0.08);
         }
+
         .stTabs [aria-selected="true"] {
             background: #f9ffea !important;
             color: #1a1a1a !important;
@@ -1032,8 +1308,13 @@ def customer_dashboard(user):
     )
 
     # ---------- Main Tabs ----------
-    tabs = st.tabs(["📊 My Plans", "📦 Available Plans",
-                    "🕒 Previous Plans", "📈 My Analytics", "👤 Profile"])
+    tabs = st.tabs([
+        "📊 My Plans",
+        "📦 Available Plans",
+        "🕒 Previous Plans",
+        "📈 My Analytics",
+        "👤 Profile"
+    ])
 
     # ---------- Fetch User Subscriptions ----------
     user_subs = list(customers_collection.find({"user_email": user["email"]}))
@@ -1043,36 +1324,23 @@ def customer_dashboard(user):
         st.subheader("Your Plans")
 
         # Filter plans that are active or stopped (exclude previous)
-        display_plans = [p for p in user_subs if p.get("status") in [
-            "active", "stopped"]]
+        display_plans = [p for p in user_subs if p.get("status") in ["active", "stopped"]]
 
         if display_plans:
-            for p in display_plans:
-                plan_info = plans_collection.find_one(
-                    {"name": p.get("plan_name")})
+            for i, p in enumerate(display_plans):
+                plan_info = plans_collection.find_one({"name": p.get("plan_name")})
                 if plan_info:
-                    # Initialize status if missing
-                    if "status" not in p:
-                        customers_collection.update_one(
-                            {"user_email": user["email"],
-                                "plan_name": plan_info["name"]},
-                            {"$set": {"status": "active"}}
-                        )
-                        p["status"] = "active"
-
-                    # Streamlit session state key (unique per plan)
-                    plan_key = f"plan_{plan_info['_id']}_status"
+                    plan_key = f"plan_{plan_info['_id']}_{i}_status"
                     if plan_key not in st.session_state:
-                        st.session_state[plan_key] = p["status"]
-
+                        st.session_state[plan_key] = p.get("status", "active")
+                    
                     status_text = st.session_state[plan_key].capitalize()
                     usage_gb = p.get("usage_gb", 0)
-                    usage_percent = int(
-                        (usage_gb / plan_info["valid_data"]) * 100) if plan_info["valid_data"] else 0
+                    usage_percent = int((usage_gb / plan_info.get("valid_data", 1)) * 100)
                     usage_percent = min(100, usage_percent)
 
-                    # ---------- Plan Card HTML ----------
-                    card_html = f"""
+                    # Plan card HTML
+                    st.markdown(f"""
                     <div style="
                         border-radius:16px;
                         padding:20px;
@@ -1081,7 +1349,7 @@ def customer_dashboard(user):
                         box-shadow: 0 4px 14px rgba(0,0,0,0.1);
                         border-left: 6px solid #0ea5e9;
                     ">
-                        <h4 style="color:#0ea5e9; margin-bottom:8px;">{plan_info.get('name', 'Plan')}</h4>
+                        <h4 style="color:#0ea5e9; margin-bottom:8px;">{plan_info.get('name')}</h4>
                         <p>💰 <b>Price:</b> ₹{plan_info.get('price', 0)} | ⏱ <b>{plan_info.get('validity_days', 0)}</b> days | ⚡ <b>{plan_info.get('speed', 'N/A')}</b></p>
                         <p>📊 <b>Usage:</b> {usage_gb:.2f} / {plan_info.get('valid_data', 0)} GB</p>
                         <div style="
@@ -1100,35 +1368,32 @@ def customer_dashboard(user):
                         </div>
                         <p style="text-align:right; margin-top:5px;">Status: <b>{status_text}</b></p>
                     </div>
-                    """
-                    st.markdown(card_html, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
 
-                    # ---------- Buttons ----------
+                    # Buttons
                     col1, col2 = st.columns([1, 1])
                     with col1:
-                        pause_resume_label = "⏸ Pause" if st.session_state[
-                            plan_key] == "active" else "▶ Resume"
-                        if st.button(pause_resume_label, key=f"btn_toggle_{plan_info['_id']}"):
+                        toggle_label = "⏸ Pause" if st.session_state[plan_key] == "active" else "▶ Resume"
+                        if st.button(toggle_label, key=f"btn_toggle_{plan_info['_id']}_{i}"):
                             new_status = "stopped" if st.session_state[plan_key] == "active" else "active"
                             customers_collection.update_one(
-                                {"user_email": user["email"],
-                                    "plan_name": plan_info["name"]},
+                                {"user_email": user["email"], "plan_name": plan_info["name"]},
                                 {"$set": {"status": new_status}}
                             )
                             st.session_state[plan_key] = new_status
                             st.rerun()
 
                     with col2:
-                        if st.button("❌ Cancel", key=f"btn_cancel_{plan_info['_id']}"):
+                        if st.button("❌ Cancel", key=f"btn_cancel_{plan_info['_id']}_{i}"):
                             customers_collection.update_one(
-                                {"user_email": user["email"],
-                                    "plan_name": plan_info["name"]},
+                                {"user_email": user["email"], "plan_name": plan_info["name"]},
                                 {"$set": {"status": "previous"}}
                             )
                             st.session_state[plan_key] = "previous"
                             st.rerun()
         else:
             st.info("You have no active or stopped plans.")
+
 
     # ---------- AVAILABLE PLANS ----------
     with tabs[1]:
@@ -1165,18 +1430,15 @@ def customer_dashboard(user):
                 )
 
                 # Fetch and filter plans
-                filtered_plans = list(plans_collection.find(
-                    {"duration_type": duration}))
+                filtered_plans = list(plans_collection.find({"duration_type": duration}))
                 if plan_type != "All":
-                    filtered_plans = [p for p in filtered_plans if p.get(
-                        "plan_type") == plan_type]
+                    filtered_plans = [p for p in filtered_plans if p.get("plan_type") == plan_type]
 
                 if filtered_plans:
                     for plan in filtered_plans:
                         bg_start, bg_end = duration_base_colors[duration]
                         border_color = border_colors[duration]
-                        text_color = plan_type_text_colors.get(
-                            plan.get("plan_type", "Normal"), "#065f46")
+                        text_color = plan_type_text_colors.get(plan.get("plan_type", "Normal"), "#065f46")
 
                         # Add offer icon if plan type is "Offer"
                         offer_badge = ""
@@ -1200,12 +1462,14 @@ def customer_dashboard(user):
                         """, unsafe_allow_html=True)
 
                         if st.button(f"Subscribe", key=f"sub_{plan['_id']}"):
+                            # Check only active or stopped subscriptions
                             existing = customers_collection.find_one({
-                                "user_email": user["email"], "plan_name": plan["name"]
+                                "user_email": user["email"],
+                                "plan_name": plan["name"],
+                                "status": {"$in": ["active", "stopped"]}
                             })
                             if existing:
-                                st.warning(
-                                    "⚠ You are already subscribed to this plan.")
+                                st.warning("⚠ You are already subscribed to this plan.")
                             else:
                                 customers_collection.insert_one({
                                     "user_email": user["email"],
@@ -1214,9 +1478,9 @@ def customer_dashboard(user):
                                     "subscribed_on": datetime.now(),
                                     "status": "active"
                                 })
-                                st.success(
-                                    f"✅ Subscribed to {plan['name']} successfully!")
+                                st.success(f"✅ Subscribed to {plan['name']} successfully!")
                                 st.rerun()  # Refresh dashboard immediately
+
                 else:
                     st.info("No plans available for this filter.")
 
@@ -1237,52 +1501,45 @@ def customer_dashboard(user):
                     key=f"prev_filter_{duration}"
                 )
 
-                # Fetch previous/inactive plans for this duration
+                # Fetch previous/inactive plans for this user
                 prev_plans = list(customers_collection.find({
                     "user_email": user["email"],
                     "status": {"$in": ["previous", "stopped"]}
                 }))
 
-                # Filter plans by duration
-                prev_plans = [p for p in prev_plans if plans_collection.find_one(
-                    {"name": p["plan_name"], "duration_type": duration}
-                )]
+                # Filter plans by duration and type
+                filtered_prev_plans = []
+                for p in prev_plans:
+                    plan_info = plans_collection.find_one({"name": p["plan_name"], "duration_type": duration})
+                    if plan_info:
+                        if plan_type == "All" or plan_info.get("plan_type") == plan_type:
+                            filtered_prev_plans.append((p, plan_info))
 
-                # Filter by plan type if selected
-                if plan_type != "All":
-                    prev_plans = [p for p in prev_plans if plans_collection.find_one(
-                        {"name": p["plan_name"], "plan_type": plan_type}
-                    )]
+                if filtered_prev_plans:
+                    for p, plan_info in filtered_prev_plans:
+                        usage_gb = p.get("usage_gb", 0)
+                        usage_percent = int((usage_gb / plan_info.get("valid_data", 1)) * 100)
+                        usage_percent = min(100, usage_percent)
 
-                if prev_plans:
-                    for p in prev_plans:
-                        plan_info = plans_collection.find_one(
-                            {"name": p["plan_name"]})
-                        if plan_info:
-                            usage_gb = p.get("usage_gb", 0)
-                            usage_percent = int(
-                                (usage_gb / plan_info.get("valid_data", 1)) * 100)
-                            usage_percent = min(100, usage_percent)
-
-                            st.markdown(f"""
-                            <div style='
-                                border-radius:16px;
-                                padding:20px;
-                                margin-bottom:15px;
-                                background: linear-gradient(135deg, #fef3f3, #fde2e2);
-                                box-shadow: 0 4px 14px rgba(0,0,0,0.1);
-                                border-left: 6px solid #ef4444;
-                                transition: transform 0.2s;
-                            '>
-                                <h4 style='color:#b91c1c; margin-bottom:8px;'>{plan_info['name']}</h4>
-                                <p>💰 <b>Price:</b> ₹{plan_info['price']} | ⏱ <b>{plan_info['validity_days']}</b> days | ⚡ <b>{plan_info['speed']}</b></p>
-                                <p>📊 <b>Usage:</b> {usage_gb:.2f} / {plan_info['valid_data']} GB</p>
-                                <div style='background:#f3f3f3; border-radius:8px; width:100%; height:16px;'>
-                                    <div style='background:#ef4444; width:{usage_percent}%; height:100%; border-radius:8px;'></div>
-                                </div>
-                                <p style='text-align:right; margin-top:5px;'>Status: <b>{p.get("status", "previous").capitalize()}</b></p>
+                        st.markdown(f"""
+                        <div style='
+                            border-radius:16px;
+                            padding:20px;
+                            margin-bottom:15px;
+                            background: linear-gradient(135deg, #fef3f3, #fde2e2);
+                            box-shadow: 0 4px 14px rgba(0,0,0,0.1);
+                            border-left: 6px solid #ef4444;
+                            transition: transform 0.2s;
+                        '>
+                            <h4 style='color:#b91c1c; margin-bottom:8px;'>{plan_info['name']}</h4>
+                            <p>💰 <b>Price:</b> ₹{plan_info['price']} | ⏱ <b>{plan_info['validity_days']}</b> days | ⚡ <b>{plan_info['speed']}</b></p>
+                            <p>📊 <b>Usage:</b> {usage_gb:.2f} / {plan_info['valid_data']} GB</p>
+                            <div style='background:#f3f3f3; border-radius:8px; width:100%; height:16px;'>
+                                <div style='background:#ef4444; width:{usage_percent}%; height:100%; border-radius:8px;'></div>
                             </div>
-                            """, unsafe_allow_html=True)
+                            <p style='text-align:right; margin-top:5px;'>Status: <b>{p.get("status", "previous").capitalize()}</b></p>
+                        </div>
+                        """, unsafe_allow_html=True)
                 else:
                     st.info("No previous or inactive plans found for this filter.")
 
@@ -1291,59 +1548,48 @@ def customer_dashboard(user):
         st.subheader("📈 My Analytics")
 
         # Create subtabs for analytics
-        analytics_tabs = st.tabs(
-            ["Usage Trends", "Cost & Spending", "Compare Plans"])
+        analytics_tabs = st.tabs(["Usage Trends", "Cost & Spending", "Compare Plans"])
 
         # Fetch all user subscriptions
-        user_subs = list(customers_collection.find(
-            {"user_email": user["email"]}))
+        user_subs = list(customers_collection.find({"user_email": user["email"]}))
 
         # Prepare dataframe for analytics
         analytics_data = []
         for sub in user_subs:
-            plan_info = plans_collection.find_one({"name": sub["plan_name"]})
+            plan_info = plans_collection.find_one({"name": sub.get("plan_name")})
             if plan_info:
                 analytics_data.append({
-                    "Plan": plan_info["name"],
-                    "Price": plan_info["price"],
-                    "Validity": plan_info["validity_days"],
-                    "Speed": plan_info["speed"],
-                    "Total Data (GB)": plan_info["valid_data"],
+                    "Plan": plan_info.get("name", ""),
+                    "Price": plan_info.get("price", 0),
+                    "Validity": plan_info.get("validity_days", 0),
+                    "Duration": plan_info.get("duration_type", "N/A"),
+                    "Plan Type": plan_info.get("plan_type", "Normal"),
+                    "Speed": plan_info.get("speed", "N/A"),
+                    "Total Data (GB)": plan_info.get("valid_data", 0),
                     "Used Data (GB)": sub.get("usage_gb", 0),
                     "Status": sub.get("status", "active")
                 })
+
         df = pd.DataFrame(analytics_data)
 
         # ---------- Subtab 1: Usage Trends ----------
         with analytics_tabs[0]:
             st.subheader("Usage Trends")
-
-            if not df.empty:
-                # ---------- Dropdowns for filtering ----------
+            if not df.empty and "Plan" in df.columns:
                 duration_options = ["All", "Monthly", "Quarterly", "Yearly"]
                 type_options = ["All", "Normal", "Offer"]
 
-                selected_duration = st.selectbox(
-                    "Filter by Duration", duration_options, key="usage_duration")
-                selected_type = st.selectbox(
-                    "Filter by Type", type_options, key="usage_type")
+                selected_duration = st.selectbox("Filter by Duration", duration_options, key="usage_duration")
+                selected_type = st.selectbox("Filter by Type", type_options, key="usage_type")
 
-                # Filter dataframe based on selections
                 filtered_df = df.copy()
                 if selected_duration != "All":
-                    filtered_df = filtered_df[filtered_df["Validity"].apply(
-                        lambda x: plans_collection.find_one({"validity_days": x})[
-                            "duration_type"] == selected_duration
-                    )]
+                    filtered_df = filtered_df[filtered_df["Duration"] == selected_duration]
                 if selected_type != "All":
-                    filtered_df = filtered_df[filtered_df["Plan"].apply(
-                        lambda p: plans_collection.find_one({"name": p}).get(
-                            "plan_type", "Normal") == selected_type
-                    )]
+                    filtered_df = filtered_df[filtered_df["Plan Type"] == selected_type]
 
                 if not filtered_df.empty:
-                    fig = px.line(filtered_df, x="Plan", y="Used Data (GB)", markers=True,
-                                  title="Data Usage per Plan")
+                    fig = px.line(filtered_df, x="Plan", y="Used Data (GB)", markers=True, title="Data Usage per Plan")
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("No usage data available for the selected filters.")
@@ -1353,33 +1599,21 @@ def customer_dashboard(user):
         # ---------- Subtab 2: Cost & Spending ----------
         with analytics_tabs[1]:
             st.subheader("Cost & Spending")
-
-            if not df.empty:
-                # ---------- Dropdowns for filtering ----------
+            if not df.empty and "Plan" in df.columns:
                 duration_options = ["All", "Monthly", "Quarterly", "Yearly"]
                 type_options = ["All", "Normal", "Offer"]
 
-                selected_duration = st.selectbox(
-                    "Filter by Duration", duration_options, key="cost_duration")
-                selected_type = st.selectbox(
-                    "Filter by Type", type_options, key="cost_type")
+                selected_duration = st.selectbox("Filter by Duration", duration_options, key="cost_duration")
+                selected_type = st.selectbox("Filter by Type", type_options, key="cost_type")
 
-                # Filter dataframe based on selections
                 filtered_df = df.copy()
                 if selected_duration != "All":
-                    filtered_df = filtered_df[filtered_df["Validity"].apply(
-                        lambda x: plans_collection.find_one({"validity_days": x})[
-                            "duration_type"] == selected_duration
-                    )]
+                    filtered_df = filtered_df[filtered_df["Duration"] == selected_duration]
                 if selected_type != "All":
-                    filtered_df = filtered_df[filtered_df["Plan"].apply(
-                        lambda p: plans_collection.find_one({"name": p}).get(
-                            "plan_type", "Normal") == selected_type
-                    )]
+                    filtered_df = filtered_df[filtered_df["Plan Type"] == selected_type]
 
                 if not filtered_df.empty:
-                    fig = px.bar(filtered_df, x="Plan", y="Price", color="Status",
-                                 title="Cost per Plan")
+                    fig = px.bar(filtered_df, x="Plan", y="Price", color="Status", title="Cost per Plan")
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("No cost data available for the selected filters.")
@@ -1389,30 +1623,27 @@ def customer_dashboard(user):
         # ---------- Subtab 3: Compare Plans ----------
         with analytics_tabs[2]:
             st.subheader("Compare Two Plans")
-            plans_list = df["Plan"].tolist()
-            if len(plans_list) >= 2:
-                plan1 = st.selectbox("Select First Plan",
-                                     plans_list, key="compare1")
-                plan2 = st.selectbox("Select Second Plan",
-                                     plans_list, key="compare2")
+            if not df.empty and "Plan" in df.columns:
+                plans_list = df["Plan"].tolist()
+                if len(plans_list) >= 2:
+                    plan1 = st.selectbox("Select First Plan", plans_list, key="compare1")
+                    plan2 = st.selectbox("Select Second Plan", plans_list, key="compare2")
 
-                compare_df = df[df["Plan"].isin(
-                    [plan1, plan2])].set_index("Plan")
-                st.write(compare_df[["Price", "Validity",
-                                     "Speed", "Total Data (GB)", "Used Data (GB)"]])
+                    compare_df = df[df["Plan"].isin([plan1, plan2])].set_index("Plan")
+                    st.write(compare_df[["Price", "Validity", "Speed", "Total Data (GB)", "Used Data (GB)"]])
 
-                # Side-by-side bar chart for comparison
-                fig = px.bar(compare_df.reset_index(), x="Plan", y=["Price", "Total Data (GB)", "Used Data (GB)"],
-                             barmode="group", title=f"Comparison: {plan1} vs {plan2}")
-                st.plotly_chart(fig, use_container_width=True)
+                    fig = px.bar(compare_df.reset_index(), x="Plan",
+                                y=["Price", "Total Data (GB)", "Used Data (GB)"],
+                                barmode="group",
+                                title=f"Comparison: {plan1} vs {plan2}")
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("Need at least two plans to compare.")
             else:
-                st.info("Need at least two plans to compare.")
+                st.info("You have no subscriptions to compare.")
 
     # ---------- PROFILE ----------
     with tabs[4]:
-        # st.subheader("👤 Profile")
-
-        # Fetch latest user info
         user_info = users_collection.find_one({"email": user['email']})
 
         if "edit_mode" not in st.session_state:
@@ -1421,61 +1652,31 @@ def customer_dashboard(user):
         def toggle_edit():
             st.session_state.edit_mode = not st.session_state.edit_mode
 
-        # ---------- PROFILE CARD ----------
+        # PROFILE CARD
         profile_card_html = f"""
-        <div style='
-            max-width:500px;
-            margin:auto;
-            border-radius:16px;
-            padding:25px 30px;
-            background: linear-gradient(135deg,#e0f7fa,#ffffff);
-            border: 1px solid #e0e0e0;
-            box-shadow: 0 6px 18px rgba(0,0,0,0.08);
-            font-family: Arial, sans-serif;
-            transition: all 0.3s ease-in-out;
-        '>
-            <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;'>
-                <h3 style='margin:0; color:#0ea5e9;'>👤 Profile Information</h3>
-                <button style='
-                    background-color:#0ea5e9; color:white; border:none;
-                    padding:6px 14px; border-radius:8px; cursor:pointer;
-                ' onclick="window.streamlitSendMessage('toggle_edit', true)">
-                    ✏️ Edit
-                </button>
-            </div>
-            <p style='margin:8px 0; font-size:16px;'><strong>Full Name:</strong> {user_info.get('name', '')}</p>
-            <p style='margin:8px 0; font-size:16px;'><strong>📧 Email:</strong> {user_info.get('email', '')}</p>
-            <p style='margin:8px 0; font-size:16px;'><strong>📞 Phone:</strong> {user_info.get('phone', 'Not added')}</p>
-            <p style='margin:8px 0; font-size:16px;'><strong>🏠 Address:</strong> {user_info.get('address', 'Not added')}</p>
+        <div style='max-width:500px; margin:auto; border-radius:16px; padding:25px 30px;
+                    background: linear-gradient(135deg,#e0f7fa,#ffffff); border: 1px solid #e0e0e0;
+                    box-shadow: 0 6px 18px rgba(0,0,0,0.08); font-family: Arial, sans-serif;'>
+            <h3 style='color:#0ea5e9;'>👤 Profile Information</h3>
+            <p><strong>Full Name:</strong> {user_info.get('name', '')}</p>
+            <p>📧 <strong>Email:</strong> {user_info.get('email', '')}</p>
+            <p>📞 <strong>Phone:</strong> {user_info.get('phone', 'Not added')}</p>
+            <p>🏠 <strong>Address:</strong> {user_info.get('address', 'Not added')}</p>
         </div>
         """
         st.markdown(profile_card_html, unsafe_allow_html=True)
-
-        # ---------- EDIT MODE ----------
         st.button("✏️ Edit Profile", on_click=toggle_edit)
 
         if st.session_state.edit_mode:
-            st.markdown("""
-            <div style='max-width:500px; margin:auto; padding:20px; 
-                        border-radius:16px; background:#f3f4f6; box-shadow:0 4px 12px rgba(0,0,0,0.08);'>
-            <h4 style='color:#0ea5e9;'>Edit Your Profile</h4>
-            </div>
-            """, unsafe_allow_html=True)
-
-            phone = st.text_input("📞 Phone", value=user_info.get(
-                "phone", ""), key="profile_phone")
-            address = st.text_input("🏠 Address", value=user_info.get(
-                "address", ""), key="profile_address")
-            new_password = st.text_input(
-                "🔒 New Password", type="password", key="profile_password")
+            phone = st.text_input("📞 Phone", value=user_info.get("phone", ""), key="profile_phone")
+            address = st.text_input("🏠 Address", value=user_info.get("address", ""), key="profile_address")
+            new_password = st.text_input("🔒 New Password", type="password", key="profile_password")
 
             if st.button("💾 Save Changes", key="save_profile"):
                 update_data = {"phone": phone, "address": address}
                 if new_password.strip():
-                    # TODO: Hash password in production
                     update_data["password"] = new_password
-                users_collection.update_one(
-                    {"email": user_info["email"]}, {"$set": update_data})
+                users_collection.update_one({"email": user_info["email"]}, {"$set": update_data})
                 st.success("✅ Profile updated successfully!")
                 st.session_state.edit_mode = False
                 st.rerun()
