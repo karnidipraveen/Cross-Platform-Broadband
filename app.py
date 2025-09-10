@@ -47,6 +47,10 @@ if "user" not in st.session_state:
 if "page" not in st.session_state:
     st.session_state.page = "auth"  # 'auth' OR 'dashboard'
 
+# Flash message storage
+if "flash" not in st.session_state:
+    st.session_state.flash = None
+
 
 # ====================================================
 # 🔑 Authentication Functions (Signup & Login)
@@ -75,11 +79,32 @@ def login(email, password):
         return None, "⏳ Waiting for admin approval."
     return user, f"✅ Welcome {user['name']}!"
 
+
+# ====================================================
+# 🔔 Flash Message Helpers
+# ====================================================
+def set_flash(msg, level="success"):
+    st.session_state.flash = {"msg": msg, "level": level}
+
+
+def show_flash():
+    if st.session_state.flash:
+        msg = st.session_state.flash["msg"]
+        level = st.session_state.flash["level"]
+        if level == "success":
+            st.success(msg)
+        elif level == "error":
+            st.error(msg)
+        elif level == "warning":
+            st.warning(msg)
+        else:
+            st.info(msg)
+        st.session_state.flash = None
+
+
 # ====================================================
 # 📝 Authentication Page (Login / Signup UI)
 # ====================================================
-
-
 def auth_page():
     st.markdown("<h1 style='text-align:center; color:#0ea5e9;'>🌐 Broadband Subscription Portal</h1>",
                 unsafe_allow_html=True)
@@ -91,14 +116,18 @@ def auth_page():
         st.subheader("📝 Customer Signup")
         name = st.text_input("Full Name", key="signup_name")
         email = st.text_input("Email", key="signup_email")
-        password = st.text_input(
-            "Password", type="password", key="signup_pass")
+        password = st.text_input("Password", type="password", key="signup_pass")
 
         if st.button("Signup", use_container_width=True, key="signup_btn"):
             if name and email and password:
                 success, msg = signup(name, email, password)
-                st.success(msg) if success else st.error(msg)
-                st.rerun()
+                if success:
+                    st.success(msg)
+                    # trigger rerun, fields will be cleared
+                    st.session_state.page = "auth"
+                    st.rerun()
+                else:
+                    st.error(msg)
             else:
                 st.warning("⚠ Please fill all fields.")
 
@@ -886,6 +915,7 @@ def admin_dashboard(user):
         else:
             st.info("No subscriptions or plans available.")
 
+    
     # ---------- ADD USER TAB ----------
     with tabs[4]:
         st.subheader("Add New User")
