@@ -924,50 +924,43 @@ def admin_dashboard(user):
             else:
                 st.warning("Please fill all fields.")
 
-    # ---------- ADD PLAN TAB ----------
-    with tabs[5]:
-        st.subheader("➕ Add New Broadband Plan")
+    # ---------- ADD USER TAB ----------
+    with tabs[4]:
+        st.subheader("Add New User")
 
-        plan_name = st.text_input("Plan Name", key="add_plan_name")
-        price = st.number_input("Price (₹)", min_value=0,
-                                step=10, key="add_plan_price")
-        valid_data = st.number_input(
-            "Data Limit (GB)", min_value=0, step=1, key="add_plan_data")
-        speed = st.text_input("Speed (e.g., 50 Mbps)", key="add_plan_speed")
-        validity_days = st.number_input(
-            "Validity (Days)", min_value=1, step=1, key="add_plan_validity")
-        description = st.text_area("Description", key="add_plan_desc")
+        # Get logged-in user details
+        current_email = st.session_state.get("email", "")
+        current_role = st.session_state.get("role", "customer")
 
-        # ✅ New fields
-        duration = st.selectbox(
-            "Package Duration",
-            ["Monthly", "Quarterly", "Yearly"],
-            key="add_plan_duration"
-        )
+        name = st.text_input("Full Name", key="add_user_name")
+        email = st.text_input("Email", key="add_user_email")
+        password = st.text_input("Password", type="password", key="add_user_pass")
 
-        plan_type = st.selectbox(
-            "Plan Type",
-            ["Normal", "Offer"],
-            key="add_plan_type"
-        )
+        # Role selectbox logic
+        if current_email == "admin@portal.com":
+            # Only super admin (fixed email) can add admins
+            role = st.selectbox("Role", ["customer", "admin"], key="add_user_role")
+        else:
+            role = "customer"  # Force customer creation
+            st.info("⚠️ Only Super Admin can create Admin users. You can add customers.")
 
-        if st.button("Add Plan", key="add_plan_btn"):
-            if plan_name and price and valid_data and speed and validity_days:
-                plans_collection.insert_one({
-                    "name": plan_name,
-                    "price": price,
-                    "valid_data": valid_data,
-                    "speed": speed,
-                    "validity_days": validity_days,
-                    "description": description,
-                    "duration": duration,       # 🆕 Monthly/Quarterly/Yearly
-                    "plan_type": plan_type,     # 🆕 Normal/Offer
-                    "createdAt": datetime.now()
-                })
-                st.success(f"✅ Plan '{plan_name}' added successfully!")
-                st.rerun()
+        if st.button("Add User", key="add_user_btn"):
+            if name and email and password:
+                if users_collection.find_one({"email": email}):
+                    st.error("Email already exists!")
+                else:
+                    users_collection.insert_one({
+                        "name": name,
+                        "email": email,
+                        "password": password,  # ⚠️ hash in production
+                        "role": role,
+                        "approved": True if role == "admin" else False,
+                        "created_at": datetime.now()
+                    })
+                    st.success(f"✅ User {name} added as {role}!")
+                    st.rerun()
             else:
-                st.warning("⚠ Please fill all the required fields!")
+                st.warning("Please fill all fields.")
 
 
 # ========================
@@ -1524,3 +1517,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
