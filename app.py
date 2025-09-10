@@ -175,14 +175,15 @@ def admin_dashboard(user):
             if sub.get("status") == "active":
                 active_revenue += plan["price"]
 
-    # ---------- Display metrics in 5 columns ----------
-    col1, col2, col3, col4, col5 = st.columns(5)
+    # ---------- Display metrics in custom widths ----------
+    col1, col2, col3, col4, col5 = st.columns([1.2, 1.2, 1.2, 1.3, 1.5])
 
     col1.metric("👥 Total Users", total_users)
     col2.metric("🙋 Total Customers", total_customers)
-    col3.metric("📋 Total Subscriptions", total_subscriptions)
+    col3.metric("📋 Subscriptions", total_subscriptions)
     col4.metric("⚡ Active Revenue", f"₹{active_revenue:,}")
     col5.metric("💰 Total Revenue", f"₹{total_revenue:,}")
+
 
     # Dynamic CSS for button-like tabs
     st.markdown(
