@@ -890,44 +890,6 @@ def admin_dashboard(user):
     with tabs[4]:
         st.subheader("Add New User")
 
-        # Get logged-in user role from session
-        current_role = st.session_state.get("role", "customer")
-
-        name = st.text_input("Full Name", key="add_user_name")
-        email = st.text_input("Email", key="add_user_email")
-        password = st.text_input(
-            "Password", type="password", key="add_user_pass")
-
-        # Role selectbox logic
-        if current_role == "super_admin":
-            role = st.selectbox(
-                "Role", ["customer", "admin"], key="add_user_role")
-        else:
-            role = "customer"  # Force only customer creation
-            st.info(
-                "⚠️ Only Super Admin can create Admin users. You can add customers.")
-
-        if st.button("Add User", key="add_user_btn"):
-            if name and email and password:
-                if users_collection.find_one({"email": email}):
-                    st.error("Email already exists!")
-                else:
-                    users_collection.insert_one({
-                        "name": name,
-                        "email": email,
-                        "password": password,
-                        "role": role,
-                        "approved": True if role == "admin" else False,
-                        "created_at": datetime.now()
-                    })
-                    st.success(f"✅ User {name} added as {role}!")
-            else:
-                st.warning("Please fill all fields.")
-
-    # ---------- ADD USER TAB ----------
-    with tabs[4]:
-        st.subheader("Add New User")
-
         # Get logged-in user details
         current_email = st.session_state.get("email", "")
         current_role = st.session_state.get("role", "customer")
@@ -1517,4 +1479,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
